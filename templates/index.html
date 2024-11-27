@@ -328,24 +328,35 @@
 
         document.getElementById('checkNow').addEventListener('click', async function() {
             this.disabled = true;
-            this.textContent = '检查中...';
+            this.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 检查中...';
             
             try {
                 const response = await fetch('/check', {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
                 });
-                const data = await response.json();
                 
+                if (!response.ok) {
+                    // 解析详细的错误信息
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `服务器错误 (${response.status})`);
+                }
+                
+                const data = await response.json();
                 if (data.status === 'success') {
+                    // 添加成功提示
+                    const toast = new bootstrap.Toast(document.createElement('div'));
+                    toast.show();
                     window.location.reload();
-                } else {
-                    alert('检查失败，请重试');
                 }
             } catch (error) {
-                alert('检查失败，请重试');
+                console.error('检查更新失败:', error);
+                alert(`检查失败: ${error.message || '请稍后重试'}`);
             } finally {
                 this.disabled = false;
-                this.textContent = '立即检查更新';
+                this.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 立即检查更新';
             }
         });
 
