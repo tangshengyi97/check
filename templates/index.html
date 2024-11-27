@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>页面更新监控</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .url-cell {
+            max-width: 250px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .url-cell:hover {
+            overflow: visible;
+            white-space: normal;
+            word-break: break-all;
+            background: white;
+            position: relative;
+            z-index: 1;
+        }
+        .table-compact td, .table-compact th {
+            padding: 0.5rem;
+        }
+        .badge {
+            font-weight: normal;
+        }
+        .diff-modal .modal-dialog {
+            max-width: 90%;
+        }
+        .diff-content {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .diff-added {
+            background-color: #e6ffe6;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+        .diff-removed {
+            background-color: #ffe6e6;
+            padding: 2px 4px;
+            border-radius: 2px;
+            text-decoration: line-through;
+        }
+        .monitor-table {
+            font-size: 0.9rem;
+        }
+        .monitor-table td {
+            vertical-align: middle;
+        }
+        .action-buttons {
+            white-space: nowrap;
+        }
+        .action-buttons .btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        .update-badge {
+            font-size: 0.85rem;
+            padding: 0.35em 0.65em;
+        }
+        .update-table {
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+        .update-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+        }
+        .update-row {
+            transition: background-color 0.2s;
+        }
+        .update-row:hover {
+            background-color: #f8f9fa;
+        }
+        .summary-collapse {
+            max-height: 100px;
+            overflow: hidden;
+            position: relative;
+        }
+        .summary-collapse.expanded {
+            max-height: none;
+        }
+        .summary-fade {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: linear-gradient(transparent, white);
+        }
+        .time-badge {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container py-4">
+        <!-- URL添加表单 -->
+        <div class="row mb-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3">添加监控网址</h5>
+                        <form id="addUrlForm" class="row g-3">
+                            <div class="col-md-5">
+                                <input type="url" class="form-control form-control-sm" id="url" placeholder="请输入网址" required>
+                            </div>
+                            <div class="col-md-5">
+                                <input type="text" class="form-control form-control-sm" id="description" placeholder="网址描述（选填）">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary btn-sm w-100">添加</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 监控列表 -->
+        <div class="row mb-4">
+            <div class="col">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0">监控列表</h5>
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <button id="checkNow" class="btn btn-primary">
+                                    <i class="bi bi-arrow-clockwise"></i> 立即检查更新
+                                </button>
+                                <div class="btn-group" role="group">
+                                    <button id="startHourly" class="btn btn-outline-primary" title="每小时检查一次">
+                                        <i class="bi bi-clock"></i> 每小时
+                                    </button>
+                                    <button id="startDaily" class="btn btn-outline-primary" title="每天检查一次">
+                                        <i class="bi bi-calendar"></i> 每天
+                                    </button>
+                                    <button id="stopSchedule" class="btn btn-outline-danger" style="display: none;" title="停止定时检查">
+                                        <i class="bi bi-stop-circle"></i> 停止
+                                    </button>
+                                </div>
+                                <small id="scheduleStatus" class="text-muted ms-2" style="display: none;"></small>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover table-compact monitor-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40%">网址</th>
+                                        <th style="width: 40%">描述</th>
+                                        <th style="width: 15%">最后检查时间</th>
+                                        <th style="width: 5%">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for url in monitored_urls %}
+                                    <tr>
+                                        <td class="url-cell">
+                                            <a href="{{ url.url }}" target="_blank" class="text-decoration-none">
+                                                {{ url.url }}
+                                            </a>
+                                        </td>
+                                        <td>{{ url.description }}</td>
+                                        <td>{{ url.last_check_time if url.last_check_time else '未检查' }}</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-danger delete-url" data-url="{{ url.url }}" title="删除">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 更新历史 -->
+        <div class="row">
+            <div class="col">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">更新历史</h5>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-secondary" onclick="filterUpdates('all')">全部</button>
+                        <button class="btn btn-outline-secondary" onclick="filterUpdates('updated')">有更新</button>
+                        <button class="btn btn-outline-secondary" onclick="filterUpdates('not-updated')">无更新</button>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 25%">网站</th>
+                                    <th style="width: 10%">状态</th>
+                                    <th style="width: 35%">更新内容</th>
+                                    <th style="width: 15%">检查时间</th>
+                                    <th style="width: 15%">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for record in history %}
+                                <tr class="update-row {% if record.has_update %}has-update{% else %}no-update{% endif %}">
+                                    <td class="url-cell">
+                                        <a href="{{ record.url }}" target="_blank" class="text-decoration-none">
+                                            {{ record.url }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        {% if record.error %}
+                                            <span class="badge bg-warning">
+                                                <i class="bi bi-exclamation-triangle"></i> 检查失败
+                                            </span>
+                                        {% elif record.has_update %}
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check-circle"></i> 有更新
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">
+                                                <i class="bi bi-dash-circle"></i> 无更新
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="text-truncate" style="max-width: 400px;">
+                                            {{ record.summary }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">
+                                            {{ record.timestamp.split(' ')[0] }}<br>
+                                            {{ record.timestamp.split(' ')[1] }}
+                                        </small>
+                                    </td>
+                                    <td class="action-buttons">
+                                        <a href="{{ record.url }}" target="_blank" 
+                                           class="btn btn-outline-primary btn-sm">
+                                            <i class="bi bi-box-arrow-up-right"></i>
+                                        </a>
+                                        {% if record.has_update %}
+                                        <button class="btn btn-outline-success btn-sm" 
+                                                onclick="showDiff('{{ loop.index }}')">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 更新内容对比弹窗 -->
+    <div class="modal fade diff-modal" id="diffModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">更新内容对比</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <h6>新增内容：</h6>
+                        <div class="diff-content" id="addedContent"></div>
+                    </div>
+                    <div class="mb-3">
+                        <h6>删除内容：</h6>
+                        <div class="diff-content" id="removedContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script>
+        // URL添加和检查更新的JavaScript保持不变
+        document.getElementById('addUrlForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const urlInput = document.getElementById('url');
+            const descriptionInput = document.getElementById('description');
+            const submitButton = this.querySelector('button[type="submit"]');
+            
+            submitButton.disabled = true;
+            submitButton.textContent = '添加中...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('url', urlInput.value);
+                formData.append('description', descriptionInput.value);
+                
+                const response = await fetch('/add_url', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('添加成功！');
+                    window.location.reload();
+                } else {
+                    alert(data.message || '添加失败，请重试');
+                }
+            } catch (error) {
+                alert('添加失败，请重试');
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = '添加';
+            }
+        });
+
+        document.getElementById('checkNow').addEventListener('click', async function() {
+            this.disabled = true;
+            this.textContent = '检查中...';
+            
+            try {
+                const response = await fetch('/check', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    window.location.reload();
+                } else {
+                    alert('检查失败，请重试');
+                }
+            } catch (error) {
+                alert('检查失败，请重试');
+            } finally {
+                this.disabled = false;
+                this.textContent = '立即检查更新';
+            }
+        });
+
+        // 删除URL的处理函数
+        $(document).on('click', '.delete-url', function() {
+            const url = $(this).data('url');
+            if (confirm('确定要删除这个URL吗？')) {
+                $.ajax({
+                    url: '/delete_url',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ url: url }),
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            location.reload();
+                        } else {
+                            alert('删除失败：' + response.message);
+                        }
+                    },
+                    error: function() {
+                        alert('删除请求失败，请重试');
+                    }
+                });
+            }
+        });
+
+        // 更新历史相关的JavaScript
+        function showDiff(index) {
+            const record = {{ history|tojson|safe }}[index - 1];
+            const diffModal = new bootstrap.Modal(document.getElementById('diffModal'));
+            
+            const addedContent = document.getElementById('addedContent');
+            const removedContent = document.getElementById('removedContent');
+            
+            addedContent.innerHTML = record.added_content.map(content => 
+                `<div class="diff-added">${content}</div>`
+            ).join('');
+            
+            removedContent.innerHTML = record.removed_content.map(content => 
+                `<div class="diff-removed">${content}</div>`
+            ).join('');
+            
+            if (!record.added_content.length) {
+                addedContent.innerHTML = '<div class="text-muted">无新增内容</div>';
+            }
+            if (!record.removed_content.length) {
+                removedContent.innerHTML = '<div class="text-muted">无删除内容</div>';
+            }
+            
+            diffModal.show();
+        }
+
+        function filterUpdates(type) {
+            const rows = document.querySelectorAll('.update-row');
+            rows.forEach(row => {
+                if (type === 'all') {
+                    row.style.display = '';
+                } else if (type === 'updated') {
+                    row.style.display = row.classList.contains('has-update') ? '' : 'none';
+                } else if (type === 'not-updated') {
+                    row.style.display = !row.classList.contains('has-update') ? '' : 'none';
+                }
+            });
+        }
+
+        // 定时任务相关的变量和函数
+        let scheduleInterval = null;
+        let nextCheckTime = null;
+
+        function formatTime(date) {
+            return date.toLocaleTimeString('zh-CN', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false 
+            });
+        }
+
+        function updateStatusDisplay() {
+            const status = document.getElementById('scheduleStatus');
+            if (nextCheckTime) {
+                const now = new Date();
+                const timeLeft = nextCheckTime - now;
+                if (timeLeft > 0) {
+                    const minutes = Math.floor(timeLeft / 60000);
+                    const seconds = Math.floor((timeLeft % 60000) / 1000);
+                    status.textContent = `下次检查: ${formatTime(nextCheckTime)} (剩余 ${minutes}分${seconds}秒)`;
+                }
+            }
+        }
+
+        function stopSchedule() {
+            if (scheduleInterval) {
+                clearInterval(scheduleInterval);
+                scheduleInterval = null;
+                nextCheckTime = null;
+                document.getElementById('startHourly').disabled = false;
+                document.getElementById('startDaily').disabled = false;
+                document.getElementById('stopSchedule').style.display = 'none';
+                document.getElementById('scheduleStatus').style.display = 'none';
+            }
+        }
+
+        function startSchedule(interval, displayText) {
+            // 停止现有的定时任务
+            stopSchedule();
+
+            // 设置下次检查时间
+            nextCheckTime = new Date(Date.now() + interval);
+            
+            // 禁用开始按钮，显示停止按钮
+            document.getElementById('startHourly').disabled = true;
+            document.getElementById('startDaily').disabled = true;
+            document.getElementById('stopSchedule').style.display = 'inline-block';
+            document.getElementById('scheduleStatus').style.display = 'inline-block';
+            document.getElementById('scheduleStatus').textContent = displayText;
+
+            // 启动定时器
+            scheduleInterval = setInterval(async () => {
+                // 执行检查
+                const checkButton = document.getElementById('checkNow');
+                checkButton.click();
+                
+                // 更新下次检查时间
+                nextCheckTime = new Date(Date.now() + interval);
+                
+                // 更新显示
+                document.getElementById('scheduleStatus').textContent = `${displayText} - 下次检查: ${formatTime(nextCheckTime)}`;
+            }, interval);
+
+            // 启动状态更新定时器
+            setInterval(() => {
+                if (nextCheckTime) {
+                    updateStatusDisplay();
+                }
+            }, 1000);
+        }
+
+        // 每小时检查
+        document.getElementById('startHourly').addEventListener('click', () => {
+            startSchedule(3600000, '每小时自动检查');
+        });
+
+        // 每天检查
+        document.getElementById('startDaily').addEventListener('click', () => {
+            startSchedule(86400000, '每天自动检查');
+        });
+
+        // 停止定时检查
+        document.getElementById('stopSchedule').addEventListener('click', stopSchedule);
+
+        // 页面关闭前清理定时器
+        window.addEventListener('beforeunload', stopSchedule);
+    </script>
+</body>
+</html>
