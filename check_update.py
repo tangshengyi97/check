@@ -5,18 +5,35 @@ import json
 from datetime import datetime
 import os
 
+# 修改文件路径到 /tmp 目录
+URLS_FILE = '/tmp/monitored_urls.json'
+HISTORY_FILE = '/tmp/update_history.json'
+
+def ensure_file_exists(file_path, default_content=None):
+    """确保文件存在，如果不存在则创建"""
+    try:
+        if not os.path.exists(file_path):
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(default_content if default_content is not None else [], f)
+    except Exception as e:
+        print(f"Error ensuring file exists: {e}")
+
 def get_monitored_urls():
     try:
-        urls_file = os.path.join(os.path.dirname(__file__), 'monitored_urls.json')
-        with open(urls_file, 'r', encoding='utf-8') as f:
+        ensure_file_exists(URLS_FILE, [])
+        with open(URLS_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except Exception as e:
+        print(f"Error loading URLs: {e}")
         return []
 
 def save_monitored_urls(urls):
-    urls_file = os.path.join(os.path.dirname(__file__), 'monitored_urls.json')
-    with open(urls_file, 'w', encoding='utf-8') as f:
-        json.dump(urls, f, ensure_ascii=False, indent=2)
+    try:
+        with open(URLS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(urls, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving URLs: {e}")
+        raise
 
 def add_monitored_url(url, description=""):
     urls = get_monitored_urls()
@@ -49,16 +66,20 @@ def get_content_hash(content):
 
 def load_history():
     try:
-        history_file = os.path.join(os.path.dirname(__file__), 'update_history.json')
-        with open(history_file, 'r', encoding='utf-8') as f:
+        ensure_file_exists(HISTORY_FILE, [])
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except Exception as e:
+        print(f"Error loading history: {e}")
         return []
 
 def save_history(history):
-    history_file = os.path.join(os.path.dirname(__file__), 'update_history.json')
-    with open(history_file, 'w', encoding='utf-8') as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
+    try:
+        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving history: {e}")
+        raise
 
 def summarize_changes(added_content, removed_content):
     summary = []

@@ -319,7 +319,7 @@
                     alert(data.message || '添加失败，请重试');
                 }
             } catch (error) {
-                alert('添加失败，请重试');
+                alert('添���失败，请重试');
             } finally {
                 submitButton.disabled = false;
                 submitButton.textContent = '添加';
@@ -338,22 +338,33 @@
                     }
                 });
                 
-                if (!response.ok) {
-                    // 解析详细的错误信息
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || `服务器错误 (${response.status})`);
-                }
-                
-                const data = await response.json();
-                if (data.status === 'success') {
-                    // 添加成功提示
-                    const toast = new bootstrap.Toast(document.createElement('div'));
-                    toast.show();
-                    window.location.reload();
+                let errorMessage;
+                try {
+                    const data = await response.json();
+                    if (!response.ok) {
+                        errorMessage = data.message || `服务器错误 (${response.status})`;
+                        throw new Error(errorMessage);
+                    }
+                    
+                    if (data.status === 'success') {
+                        window.location.reload();
+                    } else {
+                        throw new Error(data.message || '检查失败');
+                    }
+                } catch (parseError) {
+                    // 处理非JSON响应
+                    if (!response.ok) {
+                        const textResponse = await response.text();
+                        console.error('服务器响应:', textResponse);
+                        errorMessage = `服务器错误 (${response.status}): 请检查服务器日志`;
+                    } else {
+                        errorMessage = '无效的服务器响应';
+                    }
+                    throw new Error(errorMessage);
                 }
             } catch (error) {
                 console.error('检查更新失败:', error);
-                alert(`检查失败: ${error.message || '请稍后重试'}`);
+                alert(`检查失败: ${error.message}`);
             } finally {
                 this.disabled = false;
                 this.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 立即检查更新';
